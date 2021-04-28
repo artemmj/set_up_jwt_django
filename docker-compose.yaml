@@ -1,0 +1,58 @@
+version: '3.7'
+
+services:
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: gunicorn --bind 0.0.0.0:8000 --timeout 600 --log-level debug --reload --workers 4 project.wsgi:application
+    container_name: app
+    image: app
+    restart: always
+    volumes:
+      - ././:/usr/src/app/
+    ports:
+      - 8000:8000
+    env_file: ./.env.dev
+
+  redis:
+    image: redis:5-alpine
+    container_name: app_redis
+    restart: always
+    volumes:
+      - ./volumes/redis/data:/data
+
+  db:
+    image: postgres:12.0-alpine
+    container_name: app_db
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=django
+      - POSTGRES_PASSWORD=django
+      - POSTGRES_DB=django
+    env_file: ./.env.dev
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: app_celery
+    container_name: app_celery
+    env_file: ./.env.dev
+    restart: always
+    volumes:
+      - ./project:/app
+      - ./media_root:/media_root
+    links:
+      - db
+      - redis
+    depends_on:
+      - db
+      - redis
+    command: celery worker -A project -l info -B -c 4 --beat --loglevel=info
+
+volumes:
+  postgres_data:
